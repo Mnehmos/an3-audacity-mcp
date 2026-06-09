@@ -29,15 +29,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("AudacityMCPServerExtended")
 
-# Named pipe paths for mod-script-pipe (update these if needed)
-PIPE_TO = "/tmp/audacity_script_pipe.to.501"
-PIPE_FROM = "/tmp/audacity_script_pipe.from.501"
+# Named pipe paths for mod-script-pipe
+# Windows uses named pipes under \\.\pipe\, Unix uses /tmp/
+import platform
+import os
+
+if platform.system() == "Windows":
+    PIPE_TO = r"\\.\pipe\ToSrvPipe"
+    PIPE_FROM = r"\\.\pipe\FromSrvPipe"
+else:
+    PIPE_TO = "/tmp/audacity_script_pipe.to.501"
+    PIPE_FROM = "/tmp/audacity_script_pipe.from.501"
 
 
 def detect_pipe_paths(default_to: str, default_from: str) -> tuple[str, str]:
     """
-    Detect active Audacity mod-script-pipe paths under /tmp and fall back to defaults.
+    Detect active Audacity mod-script-pipe paths. On Windows, uses named pipes.
+    On Unix, searches /tmp for active pipe files.
     """
+    if platform.system() == "Windows":
+        return default_to, default_from
+
     to_candidates = glob.glob("/tmp/audacity_script_pipe.to.*")
     from_candidates = glob.glob("/tmp/audacity_script_pipe.from.*")
 
@@ -146,12 +158,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     Manage server startup and shutdown.
     """
     try:
-        logger.info("Audacity MCP server starting up")
-        try:
-            conn = get_audacity_connection()
-            logger.info("Connected to Audacity mod-script-pipe")
-        except Exception as e:
-            logger.warning(f"Initial connection failed: {e}")
+        logger.info("Audacity MCP server starting up (lazy connection — will connect when needed)")
         yield {}
     finally:
         global _audacity_connection
